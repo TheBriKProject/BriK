@@ -1,0 +1,93 @@
+version: "3.3"
+services:
+  compile:
+    image: tork:latest
+    build: ./
+    command: "sh -c '/usr/src/tork/Entrypoint.sh'"
+
+    volumes:
+      - .:/usr/src/tork:ro
+      - tork_src:/usr/src/tork/build
+
+  bridge:
+    image: tork:latest
+    build: ./
+    command: "sh -c 'tor -f /usr/src/tork/tor_confs/torrc_docker_bridge_clean Log \"$${LOG_LEVEL} stdout\" Nickname torkbridge \
+            ServerTransportPlugin \"tork exec $${TORK_BIN_PATH} -m bridge -p 8081 -A 1 -s $${TORK_PATH}/certs/2048/bridge_cert.crt -x $${TORK_PATH}/certs/2048/bridge_private.key \
+            --max_chunks=$${MAX_CHUNKS} --chunk=$${CHUNK_SIZE} --ts_min=$${TS_MIN} --ts_max=$${TS_MAX}\"'"
+
+    env_file:
+      - '.env'
+
+    environment:
+      - SERVICE_NAME={{.Service.Name}}
+      - TASK_ID={{.Task.ID}}
+      - TASK_NAME={{.Task.Name}}
+      - TASK_SLOT={{.Task.Slot}}
+      - CRAWL_PATH=/root/crawler/
+      - START_XVFB=false
+      - DEVICE=eth0
+      - CRAWL_PARAMS=--user root --nic $${DEVICE}
+      - PROXY_FWD_PORT=9058
+      - HOME=/home/tork
+      - SERVICE=tork_client_data
+
+    networks:
+      - network
+
+    #ports:
+    #    - "8081:8081"
+    #    - "8085:9095"
+
+    volumes:
+      - .:/usr/src/tork
+      - tork_src:/usr/src/tork/build
+
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp:unconfined
+
+    #healthcheck:
+    #    test: pgrep tork
+    #    interval: 10s
+    #    timeout: 5s
+    #    retries: 3
+
+  client:
+    image: tork:latest
+    build: ./
+    command: "sh -c 'tor -f /usr/src/tork/tor_confs/torrc_docker_client_clean bridge \"tork $$(dig bridge +short):8081\"'"
+
+    deploy:
+      mode: replicated
+      replicas: 3
+
+    networks:
+      - network
+
+    ports:
+        - "9051"
+        - "9061"
+        - "9091"
+
+    volumes:
+      - .:/usr/src/tork:ro
+      - tork_src:/usr/src/tork/build
+
+    healthcheck:
+        test: pgrep tork
+        interval: 10s
+        timeout: 5s
+        retries: 3
+
+    depends_on:
+      bridge:
+        condition: service_healthy
+
+networks:
+  network:
+    driver: bridge
+
+volumes:
+  tork_src:

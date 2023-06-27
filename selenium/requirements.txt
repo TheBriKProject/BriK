@@ -1,0 +1,6 @@
+requests
+scapy
+pyvirtualdisplay
+stem==1.8.0
+selenium==3.141.0
+tbselenium==0.4.2
